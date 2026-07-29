@@ -3,18 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DDA GIS PLATFORM - WGS84 GEODETIC ENGINE</title>
+    <title>DDA GIS PLATFORM - TRUE WGS84 ORTHO ENGINE</title>
 
-    <!-- Leaflet & GIS Geodetic Plugins -->
+    <!-- 1. Leaflet Core CSS & JS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-measure/dist/leaflet-measure.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-measure/dist/leaflet-measure.js"></script>
     
-    <!-- Proj4js for EPSG:4326 (WGS84) & UTM Transformations -->
+    <!-- 2. Proj4js & Omnivore for WGS84 Geodetic Vector Parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-    <!-- Omnivore for True WGS84 KML/GeoJSON parsing -->
     <script src="https://unpkg.com/leaflet-omnivore@0.3.4/leaflet-omnivore.min.js"></script>
+
+    <!-- 3. TRUE GEOTIFF & RASTER PROCESSING LIBRARIES (सबसे महत्वपूर्ण) -->
+    <script src="https://unpkg.com/georaster"></script>
+    <script src="https://unpkg.com/georaster-layer-for-leaflet"></script>
 
     <style>
         * { box-sizing: border-box; }
@@ -25,7 +28,7 @@
             background-color: #0f172a; 
         }
 
-        /* --- 1. टॉप TITLE BAR (DDA Navy Blue & Gold) --- */
+        /* --- टॉप TITLE BAR --- */
         .title-bar {
             background: #1e3a8a; color: #ffffff; height: 55px;
             display: flex; align-items: center; padding: 0 20px;
@@ -47,7 +50,7 @@
             font-weight: 700; font-size: 12px; border-radius: 4px; cursor: pointer;
         }
 
-        /* --- 2. मुख्य टैब्स बार --- */
+        /* --- मुख्य टैब्स बार --- */
         .tabs-bar {
             background: #0f172a; height: 45px; display: flex; align-items: center;
             padding: 0 15px; gap: 6px; border-bottom: 1px solid #334155; z-index: 2000;
@@ -58,7 +61,7 @@
         }
         .tab-btn.active, .tab-btn:hover { background: #eab308; color: #0f172a; font-weight: 700; }
 
-        /* --- 3. सब-टूल्स बार --- */
+        /* --- सब-टूल्स बार --- */
         .sub-toolbar {
             background: #1e293b; height: 48px; display: flex; align-items: center; padding: 0 15px; gap: 8px;
             border-bottom: 1px solid #334155; z-index: 1900;
@@ -68,9 +71,8 @@
             font-size: 12px; font-weight: 600; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;
         }
         .tool-btn:hover { background: #38bdf8; color: #0f172a; }
-        .tool-btn.active-tool { background: #10b981; color: white; border-color: #10b981; }
 
-        /* --- 4. मुख्य लेआउट --- */
+        /* --- मुख्य लेआउट --- */
         .main-content { display: flex; flex: 1; height: calc(100vh - 155px); position: relative; }
         .sidebar-left { width: 340px; background-color: #1e293b; color: #f8fafc; padding: 15px; border-right: 1px solid #334155; z-index: 1000; overflow-y: auto; }
         .tab-pane { display: none; }
@@ -102,7 +104,7 @@
         .basemap-opt { font-size: 12px; font-weight: 600; color: #cbd5e1; cursor: pointer; display: flex; align-items: center; margin: 5px 0; }
         .basemap-opt input { margin-right: 6px; }
 
-        /* बॉटम स्टेटस बार (WGS84 & EGM96 Geoid Readout) */
+        /* बॉटम स्टेटस बार */
         .bottom-status-bar {
             background: #0f172a; color: #94a3b8; height: 28px; display: flex;
             align-items: center; justify-content: space-between; padding: 0 15px;
@@ -111,12 +113,25 @@
         .status-node { display: flex; align-items: center; gap: 15px; }
         .coord-highlight { color: #38bdf8; font-weight: bold; }
         .alt-highlight { color: #eab308; font-weight: bold; }
+
+        /* लोडिंग ओवेरले स्पिनर */
+        #loaderOverlay {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.85); z-index: 9999;
+            align-items: center; justify-content: center; flex-direction: column; color: #38bdf8; font-weight: bold; font-size: 16px;
+        }
     </style>
 </head>
 <body>
 
-    <!-- हिडन फाइल अपलोडर्स (WGS84 Raster & Vector) -->
-    <input type="file" id="orthoFileUploader" style="display:none" accept=".jpg,.jpeg,.png,.tif,.tiff" onchange="handleOrthoMatrixUpload(event)">
+    <!-- लोडिंग स्क्रीन -->
+    <div id="loaderOverlay">
+        <div>⏳ WGS84 GeoTIFF प्रोसेस हो रहा है... कृपया प्रतीक्षा करें...</div>
+        <div style="font-size: 12px; color: #94a3b8; margin-top: 8px;">Reading Spatial Datum, Extent & Reprojecting to EPSG:4326</div>
+    </div>
+
+    <!-- हिडन फाइल अपलोडर्स -->
+    <input type="file" id="orthoFileUploader" style="display:none" accept=".tif,.tiff,.jpg,.jpeg,.png" onchange="handleTrueWgs84OrthoUpload(event)">
     <input type="file" id="kmlFileUploader" style="display:none" accept=".kml,.xml,.geojson,.json" onchange="handleWgs84VectorUpload(event)">
 
     <div class="title-bar">
@@ -137,15 +152,13 @@
 
     <div class="sub-toolbar">
         <button class="tool-btn" onclick="triggerGeodeticMeasure()">📏 WGS84 Geodetic Measure</button>
-        <button id="infoBtn" class="tool-btn" onclick="toggleInfoTool()">ℹ️ Spatial Info Tool</button>
         <button class="tool-btn" style="background:#0284c7; color:white; font-weight:bold;" onclick="document.getElementById('kmlFileUploader').click()">📂 Load WGS84 Vector (.KML / .GeoJSON)</button>
-        <button class="tool-btn" style="background:#1e3a8a; color:white; font-weight:bold;" onclick="document.getElementById('orthoFileUploader').click()">📸 Upload Drone Ortho (TIF/JPG)</button>
+        <button class="tool-btn" style="background:#eab308; color:#0f172a; font-weight:800;" onclick="document.getElementById('orthoFileUploader').click()">🚁 Upload Drone Ortho (.TIF / .TIFF / .JPG)</button>
         <button class="tool-btn" style="background:#059669; color:white; font-weight:bold;" onclick="exportDrawnKML()">💾 Export Drawn KML (WGS84)</button>
     </div>
 
     <div class="main-content">
         <div class="sidebar-left">
-            <!-- DDA 17 ज़ोन्स (WGS84 Coords) -->
             <div id="tab-project" class="tab-pane active">
                 <select class="filter-select" onchange="zoomToDdaZone(this.value)">
                     <option value="">-- DDA के सभी 17 ज़ोन चुनें (WGS84 Auto Zoom) --</option>
@@ -179,22 +192,19 @@
                 
                 <div style="background:#0f172a; padding:12px; border-radius:6px; font-size:11px; border:1px solid #334155;">
                     <b style="color:#eab308;">🌐 Geodetic Parameters:</b><br>
-                    • Ellipsoid: WGS 1984<br>
+                    • Ellipsoid: WGS 1984 (EPSG:4326)<br>
                     • Semi-Major Axis: 6378137.0 m<br>
-                    • Inverse Flattening: 298.257223563<br>
+                    • GeoTIFF Parser: Active (Georaster)<br>
                     • Geoid Model: EGM96 Elevation
                 </div>
             </div>
 
-            <!-- DEM टोपोग्राफी -->
             <div id="tab-dem-contour" class="tab-pane">
                 <div style="font-size:13px; font-weight:700; margin-bottom:10px; color:#38bdf8;">⛰️ DEM WGS84 Topography Engine</div>
                 <p style="font-size:11px; color:#94a3b8; margin-bottom:12px;">WGS84 जियो-रेफ़रेंस्ड DEM लोड करें। सिस्टम भूभाग की कन्टूर रेखाएं (0.5m interval) लाइव जनरेट करेगा।</p>
-                <button class="hud-btn" style="background:#0284c7; width:100%; margin-bottom:8px;" onclick="document.getElementById('orthoFileUploader').click()">📂 Load DEM Raster (.TIF/.PNG)</button>
                 <button class="hud-btn" style="background:#0891b2; width:100%;" onclick="generateWgs84Contours()">⚡ Generate Contours (WGS84 Grid)</button>
             </div>
 
-            <!-- AI चेंज डिटेक्टर -->
             <div id="tab-ai-detector" class="tab-pane">
                 <div style="font-size:13px; font-weight:700; margin-bottom:10px; color:#ef4444;">🤖 AI Change Detection (WGS84 Bounds)</div>
                 <p style="font-size:11px; color:#94a3b8; margin-bottom:12px;">ड्रोन ऑर्थो लोड करें। AI पुराने सरकारी KML और नए निर्माणों के बीच अवैध अतिक्रमण पकड़कर WGS84 एरिया (Sq.M) की गणना करेगा।</p>
@@ -202,7 +212,6 @@
                 <button class="hud-btn" style="background:#475569; width:100%;" onclick="clearAiDetections()">🔄 Clear Red Zone</button>
             </div>
 
-            <!-- लेआउट्स -->
             <div id="tab-layout" class="tab-pane">
                 <div style="font-size:13px; font-weight:700; margin-bottom:10px; color:#eab308;">📜 DDA Approved Society Layouts</div>
                 <p style="font-size:11px; color:#94a3b8;">स्वीकृत लेआउट्स WGS84 कोऑर्डिनेट ग्रिड पर अलाइन हैं।</p>
@@ -230,7 +239,7 @@
 
     <!-- लाइव WGS84 स्टेटस बार -->
     <div class="bottom-status-bar">
-        <div>📍 DDA WGS84 Engine: <span style="color:#10b981; font-weight:bold;">✔ Geodetic Grid Synchronized</span></div>
+        <div>📍 DDA WGS84 Engine: <span style="color:#10b981; font-weight:bold;">✔ GeoTIFF Spatial Engine Active</span></div>
         <div class="status-node">
             <div>WGS84 Lat: <span id="statusBarLat" class="coord-highlight">28.61390° N</span></div>
             <div>WGS84 Lon: <span id="statusBarLng" class="coord-highlight">77.20900° E</span></div>
@@ -262,7 +271,6 @@
 
         L.control.zoom({ position: 'bottomright' }).addTo(myMap);
 
-        // Geodetic Distance Measure Plugin
         var measureControl = new L.Control.Measure({
             position: 'topleft',
             primaryLengthUnit: 'meters',
@@ -274,7 +282,6 @@
         });
         measureControl.addTo(myMap);
 
-        // ऑटो मैप रिसाइज़ (ताकि टाइल्स हमेशा लोड हों)
         function triggerMapResize() {
             setTimeout(function() { myMap.invalidateSize(true); }, 200);
         }
@@ -290,7 +297,7 @@
         var userDrawnGroup = L.layerGroup().addTo(myMap);
 
         // =========================================================================
-        // 3. WGS84 / EGM96 GEOID CURSOR TRACKER (पृथ्वी के वक्रता की गणना)
+        // 3. WGS84 / EGM96 GEOID CURSOR TRACKER
         // =========================================================================
         myMap.on('mousemove', function(e) {
             var lat = e.latlng.lat;
@@ -299,7 +306,6 @@
             document.getElementById('statusBarLat').innerText = lat.toFixed(5) + "° N";
             document.getElementById('statusBarLng').innerText = lng.toFixed(5) + "° E";
 
-            // दिल्ली का औसत EGM96 Geoid Undulation मॉडल (~213m - 218m)
             var baseAlt = 214.2;
             var altVariation = Math.sin(lat * 10) * Math.cos(lng * 10) * 3.5;
             var egm96Alt = (baseAlt + altVariation).toFixed(1);
@@ -311,21 +317,21 @@
         // =========================================================================
         var zoneCoordinates = {
             "zone-a": {center: [28.6560, 77.2240], zoom: 14, name: "Zone A (Old Delhi)"},
-            "zone-b": {center: [28.6440, 77.1980], zoom: 14, name: "Zone B (Karol Bagh / City Ext)"},
+            "zone-b": {center: [28.6440, 77.1980], zoom: 14, name: "Zone B (Karol Bagh)"},
             "zone-c": {center: [28.6980, 77.2100], zoom: 13, name: "Zone C (Civil Lines)"},
             "zone-d": {center: [28.6100, 77.2150], zoom: 14, name: "Zone D (New Delhi / Lutyens)"},
-            "zone-e": {center: [28.6380, 77.2880], zoom: 13, name: "Zone E (East Delhi / Karkardooma)"},
+            "zone-e": {center: [28.6380, 77.2880], zoom: 13, name: "Zone E (East Delhi)"},
             "zone-f": {center: [28.5350, 77.2120], zoom: 13, name: "Zone F (South Delhi / Saket)"},
-            "zone-g": {center: [28.6400, 77.1120], zoom: 13, name: "Zone G (West Delhi / Rajouri)"},
-            "zone-h": {center: [28.7020, 77.1240], zoom: 14, name: "Zone H (North-West / Pitampura)"},
+            "zone-g": {center: [28.6400, 77.1120], zoom: 13, name: "Zone G (West Delhi)"},
+            "zone-h": {center: [28.7020, 77.1240], zoom: 14, name: "Zone H (North-West)"},
             "zone-j": {center: [28.4980, 77.2520], zoom: 13, name: "Zone J (South Delhi Ext)"},
-            "zone-k1": {center: [28.7200, 77.2400], zoom: 13, name: "Zone K1 (Yamuna West Basin)"},
-            "zone-k2": {center: [28.5780, 77.0580], zoom: 13, name: "Zone K2 (Dwarka Sub-City Grid)"},
-            "zone-l": {center: [28.5200, 76.9600], zoom: 12, name: "Zone L (Najafgarh Rural Cluster)"},
+            "zone-k1": {center: [28.7200, 77.2400], zoom: 13, name: "Zone K1 (Yamuna West)"},
+            "zone-k2": {center: [28.5780, 77.0580], zoom: 13, name: "Zone K2 (Dwarka Sub-City)"},
+            "zone-l": {center: [28.5200, 76.9600], zoom: 12, name: "Zone L (Najafgarh)"},
             "zone-m": {center: [28.7340, 77.1180], zoom: 13, name: "Zone M (Rohini Sub-City)"},
             "zone-n": {center: [28.8400, 77.0800], zoom: 12, name: "Zone N (Narela Urban Ext)"},
-            "zone-o": {center: [28.6150, 77.2650], zoom: 14, name: "Zone O (Yamuna Floodplain Buffer)"},
-            "zone-p1": {center: [28.8550, 77.1300], zoom: 13, name: "Zone P1 (Narela Phase-2 Grid)"},
+            "zone-o": {center: [28.6150, 77.2650], zoom: 14, name: "Zone O (Yamuna Floodplain)"},
+            "zone-p1": {center: [28.8550, 77.1300], zoom: 13, name: "Zone P1 (Narela Phase-2)"},
             "zone-p2": {center: [28.7900, 77.1900], zoom: 13, name: "Zone P2 (North Delhi Ext)"}
         };
 
@@ -336,28 +342,63 @@
         }
 
         // =========================================================================
-        // 5. WGS84 GEO-REFERENCE ORTHO LOADER (TIF/JPG Auto-Fit to WGS84 Bounds)
+        // 5. TRUE GEOTIFF (.TIF / .TIFF) & RASTER LOADER ENGINE (सबसे महत्वपूर्ण)
         // =========================================================================
-        function handleOrthoMatrixUpload(event) {
+        function handleTrueWgs84OrthoUpload(event) {
             var file = event.target.files[0];
             if (!file) return;
 
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                var imageUrl = e.target.result;
-                var currentBounds = myMap.getBounds();
+            var fileName = file.name.toLowerCase();
+            document.getElementById('loaderOverlay').style.display = 'flex';
 
-                if (uploadedOrthoLayer) { myMap.removeLayer(uploadedOrthoLayer); }
-                
-                uploadedOrthoLayer = L.imageOverlay(imageUrl, currentBounds, {
-                    opacity: 0.85,
-                    zIndex: 400
-                }).addTo(myMap);
+            // अगर फाइल .TIF या .TIFF है -> असली Spatial Georaster इंजन से खोलना
+            if (fileName.endsWith('.tif') || fileName.endsWith('.tiff')) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var arrayBuffer = e.target.result;
+                    
+                    parseGeoraster(arrayBuffer).then(function(georaster) {
+                        if (uploadedOrthoLayer) { myMap.removeLayer(uploadedOrthoLayer); }
 
-                myMap.fitBounds(currentBounds);
-                alert("✔ WGS84 Ortho Raster लोड हो गया है! वर्तमान स्क्रीन निर्देशांकों पर जियो-रेफ़रेंस किया गया।");
-            };
-            reader.readAsDataURL(file);
+                        // GeoRasterLayer स्वतः WGS84 री-प्रोजेक्शन और बाउंड्स फिट करता है
+                        uploadedOrthoLayer = new GeoRasterLayer({
+                            georaster: georaster,
+                            opacity: 0.90,
+                            resolution: 256 // ब्राउज़र में फास्ट रेंडरिंग के लिए
+                        });
+
+                        uploadedOrthoLayer.addTo(myMap);
+                        myMap.fitBounds(uploadedOrthoLayer.getBounds());
+                        document.getElementById('loaderOverlay').style.display = 'none';
+                        alert("✅ True GeoTIFF (.TIF) सफलतापूर्वक लोड हुआ!\n\n• EPSG Projection: Auto-Detected\n• WGS84 Extent: Synced to Earth Coordinates");
+                    }).catch(function(err) {
+                        document.getElementById('loaderOverlay').style.display = 'none';
+                        alert("❌ GeoTIFF लोड करने में तकनीकी समस्या आई! सुनिश्चित करें कि फाइल सही GIS फॉर्मेट में है।");
+                        console.error(err);
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            } 
+            // अगर सामान्य .JPG या .PNG है -> वर्तमान स्क्रीन के WGS84 बाउंड्स पर फिट करना
+            else {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var imageUrl = e.target.result;
+                    var currentBounds = myMap.getBounds();
+
+                    if (uploadedOrthoLayer) { myMap.removeLayer(uploadedOrthoLayer); }
+                    
+                    uploadedOrthoLayer = L.imageOverlay(imageUrl, currentBounds, {
+                        opacity: 0.85,
+                        zIndex: 400
+                    }).addTo(myMap);
+
+                    myMap.fitBounds(currentBounds);
+                    document.getElementById('loaderOverlay').style.display = 'none';
+                    alert("✔ Standard Raster (.JPG/.PNG) लोड हुआ! (वर्तमान स्क्रीन WGS84 बाउंड्स पर अलाइन किया गया)");
+                };
+                reader.readAsDataURL(file);
+            }
         }
 
         // =========================================================================
@@ -394,7 +435,7 @@
                         alert("📍 WGS84 Vector बाउंड्री लोड हो गई है! (EPSG:4326 Coordinates Synced)");
                     }
                 } catch (err) {
-                    alert("❌ वेक्टर फाइल को पढ़ने में समस्या आई। कृपया सही KML/GeoJSON चुनें।");
+                    alert("❌ वेक्टर फाइल को पढ़ने में समस्या आई।");
                     console.error(err);
                 }
             };
@@ -402,7 +443,7 @@
         }
 
         // =========================================================================
-        // 7. WGS84 AI CHANGE DETECTION (Haversine Area Calculation)
+        // 7. WGS84 AI CHANGE DETECTION
         // =========================================================================
         function runWgs84ChangeDetection() {
             aiRedZoneGroup.clearLayers();
@@ -412,7 +453,6 @@
             var latSpan = ne.lat - sw.lat;
             var lngSpan = ne.lng - sw.lng;
 
-            // WGS84 निर्देशांकों पर 3 सटीक अवैध निर्माण (Polygons)
             var violations = [
                 [
                     [sw.lat + latSpan*0.40, sw.lng + lngSpan*0.40],
@@ -493,7 +533,6 @@
             userDrawnGroup.clearLayers();
         }
 
-        // 💾 WGS84 कोऑर्डिनेट्स को KML फाइल के रूप में डाउनलोड करना
         function exportDrawnKML() {
             var layers = userDrawnGroup.getLayers();
             if (layers.length === 0) {
@@ -518,7 +557,6 @@
     </Placemark>\n`;
                 } else if (layer instanceof L.Polygon || layer instanceof L.Polyline) {
                     var lls = layer.getLatLngs();
-                    // Handle nested arrays for Polygons
                     var coordsArray = Array.isArray(lls[0]) ? lls[0] : lls;
                     var coordStr = coordsArray.map(l => `${l.lng.toFixed(6)},${l.lat.toFixed(6)},0`).join(" ");
                     
@@ -552,7 +590,6 @@
             var input = document.getElementById('globalSearchBar').value.trim();
             if (!input) return;
 
-            // अगर इनपुट में Lat, Long (जैसे "28.6139, 77.2090") डाला गया है
             var coordMatch = input.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
             if (coordMatch) {
                 var lat = parseFloat(coordMatch[1]);
